@@ -4,12 +4,20 @@ LABEL org.opencontainers.image.title="WarpMetal Agent Sandbox" \
       org.opencontainers.image.description="Fixed, non-privileged userspace for WarpMetal Agent Runtime" \
       org.opencontainers.image.source="https://github.com/warpmetal/warpmetal-agent-sandbox"
 
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    PLAYWRIGHT_VERSION=1.62.0 \
+    NODE_PATH=/usr/local/lib/node_modules
+
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
       bash \
       ca-certificates \
       curl \
       file \
+      fontconfig \
+      fonts-dejavu-core \
+      fonts-liberation \
+      fonts-noto-color-emoji \
       git \
       gzip \
       jq \
@@ -23,6 +31,10 @@ RUN apt-get update \
       unzip \
       xz-utils \
       zip \
+    && npm install --global "playwright@${PLAYWRIGHT_VERSION}" \
+    && playwright install --with-deps --only-shell chromium \
+    && chmod -R a+rX /ms-playwright /usr/local/lib/node_modules/playwright* \
+    && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/* \
     && groupmod --new-name agent node \
     && usermod --login agent --home /home/agent --move-home node \
