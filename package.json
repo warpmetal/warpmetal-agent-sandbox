@@ -1,0 +1,11 @@
+{
+  "name": "warpmetal-agent-sandbox-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned AI CLI packages baked into the WarpMetal Agent Sandbox image",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.263",
+    "@openai/codex": "0.153.4"
+  }
+}
