@@ -77,14 +77,24 @@ for (const [name, expected] of expectedPackages) {
   assert(entry?.integrity === expected.integrity, `${name} lockfile integrity mismatch`);
 }
 
-for (const architecture of ["x64", "arm64"]) {
-  const codex = packageLock.packages[`node_modules/@openai/codex-linux-${architecture}`];
-  const claude = packageLock.packages[`node_modules/@anthropic-ai/claude-code-linux-${architecture}`];
-  assert(codex?.version === "0.153.4-linux-" + architecture, `Codex ${architecture} package is not locked`);
-  assert(claude?.version === "2.1.263", `Claude ${architecture} package is not locked`);
-  assert(typeof codex.integrity === "string", `Codex ${architecture} package lacks integrity`);
-  assert(typeof claude.integrity === "string", `Claude ${architecture} package lacks integrity`);
-}
+const codexLinuxX64 = packageLock.packages["node_modules/@openai/codex-linux-x64"];
+const claudeLinuxX64 = packageLock.packages["node_modules/@anthropic-ai/claude-code-linux-x64"];
+assert(
+  codexLinuxX64?.version === "0.153.4-linux-x64",
+  "Codex Linux x64 package is not locked",
+);
+assert(
+  claudeLinuxX64?.version === "2.1.263",
+  "Claude Linux x64 package is not locked",
+);
+assert(
+  typeof codexLinuxX64.integrity === "string",
+  "Codex Linux x64 package lacks integrity",
+);
+assert(
+  typeof claudeLinuxX64.integrity === "string",
+  "Claude Linux x64 package lacks integrity",
+);
 
 assert(
   JSON.stringify(manifest) ===

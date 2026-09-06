@@ -12,15 +12,15 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
 
 ARG TARGETARCH
 ARG CURSOR_AGENT_VERSION=2026.09.02-c22c1a3
-ARG CURSOR_AGENT_AMD64_SHA256=b73b59854762535c0fc20d7ccc51c3b5a356a851491088d60a362be48750f53c
-ARG CURSOR_AGENT_ARM64_SHA256=fb7bc635be6172ebcf68f907fd9217e3614da51916455c6d7fdb66690997884c
+ARG CURSOR_AGENT_SHA256=b73b59854762535c0fc20d7ccc51c3b5a356a851491088d60a362be48750f53c
 
 COPY package.json package-lock.json /opt/warpmetal-agent-tools/
 COPY agent-tools.json /usr/local/share/warpmetal/agent-tools.json
 COPY scripts/cursor-agent-wrapper.sh /usr/local/lib/warpmetal/cursor-agent-wrapper
 COPY scripts/warpmetal-agent-tool-report.mjs /usr/local/bin/warpmetal-agent-tool-report
 
-RUN apt-get update \
+RUN case "$TARGETARCH" in amd64) ;; *) echo "unsupported image architecture: $TARGETARCH" >&2; exit 1 ;; esac \
+    && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
       bash \
       ca-certificates \
@@ -47,16 +47,11 @@ RUN apt-get update \
     && npm ci --omit=dev --no-audit --no-fund \
     && ln -s /opt/warpmetal-agent-tools/node_modules/.bin/codex /usr/local/bin/codex \
     && ln -s /opt/warpmetal-agent-tools/node_modules/.bin/claude /usr/local/bin/claude \
-    && case "$TARGETARCH" in \
-         amd64) cursor_arch=x64; cursor_sha256="$CURSOR_AGENT_AMD64_SHA256" ;; \
-         arm64) cursor_arch=arm64; cursor_sha256="$CURSOR_AGENT_ARM64_SHA256" ;; \
-         *) echo "unsupported Cursor Agent architecture: $TARGETARCH" >&2; exit 1 ;; \
-       esac \
     && cursor_archive=/tmp/cursor-agent.tar.gz \
     && curl --fail --location --silent --show-error \
       --output "$cursor_archive" \
-      "https://downloads.cursor.com/lab/${CURSOR_AGENT_VERSION}/linux/${cursor_arch}/agent-cli-package.tar.gz" \
-    && echo "${cursor_sha256}  ${cursor_archive}" | sha256sum --check --strict \
+      "https://downloads.cursor.com/lab/${CURSOR_AGENT_VERSION}/linux/x64/agent-cli-package.tar.gz" \
+    && echo "${CURSOR_AGENT_SHA256}  ${cursor_archive}" | sha256sum --check --strict \
     && install -d -o root -g root -m 0755 /usr/local/lib/warpmetal/cursor-agent \
     && tar --extract --gzip --file "$cursor_archive" \
       --directory /usr/local/lib/warpmetal/cursor-agent --strip-components=1 \
