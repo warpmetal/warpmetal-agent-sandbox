@@ -1,0 +1,32 @@
+{
+  "schema": "warpmetal.agent-tools.v1",
+  "tools": [
+    {
+      "id": "codex",
+      "displayName": "Codex CLI",
+      "version": "0.153.4",
+      "executable": "codex",
+      "versionCommand": ["codex", "--version"],
+      "loginCommand": ["codex", "login", "--device-auth"],
+      "loginKind": "device-code"
+    },
+    {
+      "id": "claude",
+      "displayName": "Claude Code",
+      "version": "2.1.263",
+      "executable": "claude",
+      "versionCommand": ["claude", "--version"],
+      "loginCommand": ["claude"],
+      "loginKind": "interactive"
+    },
+    {
+      "id": "cursor",
+      "displayName": "Cursor CLI",
+      "version": "2026.09.02-c22c1a3",
+      "executable": "agent",
+      "versionCommand": ["agent", "--version"],
+      "loginCommand": ["agent", "login"],
+      "loginKind": "browser"
+    }
+  ]
+}

@@ -4,15 +4,27 @@ on:
   push:
     branches: [main]
     paths:
+      - ".dockerignore"
       - "Containerfile"
+      - "agent-tools.json"
+      - "package-lock.json"
+      - "package.json"
+      - "scripts/**"
       - "test-browser.cjs"
       - "test-image.sh"
+      - "test-tools.cjs"
       - ".github/workflows/image.yml"
   pull_request:
     paths:
+      - ".dockerignore"
       - "Containerfile"
+      - "agent-tools.json"
+      - "package-lock.json"
+      - "package.json"
+      - "scripts/**"
       - "test-browser.cjs"
       - "test-image.sh"
+      - "test-tools.cjs"
       - ".github/workflows/image.yml"
   workflow_dispatch:
 
@@ -23,14 +35,35 @@ env:
   IMAGE: ghcr.io/warpmetal/warpmetal-agent-sandbox
 
 jobs:
-  test:
+  validate:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node scripts/validate-agent-tools.mjs
+
+  test:
+    needs: validate
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            platform: linux/amd64
+          - architecture: arm64
+            platform: linux/arm64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
       - name: Build local image
-        run: docker build --pull --platform linux/amd64 --tag warpmetal-agent-sandbox:test --file Containerfile .
+        run: docker build --pull --platform "${{ matrix.platform }}" --tag "warpmetal-agent-sandbox:test-${{ matrix.architecture }}" --file Containerfile .
       - name: Verify fixed tools, browser rendering, and non-root boundary
-        run: sh test-image.sh warpmetal-agent-sandbox:test
+        run: sh test-image.sh "warpmetal-agent-sandbox:test-${{ matrix.architecture }}"
 
   publish:
     needs: test
