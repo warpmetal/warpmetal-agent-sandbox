@@ -65,6 +65,37 @@ The supervisor adds the runtime boundaries: read-only root filesystem, dropped
 capabilities, `no-new-privileges`, user namespaces, resource limits, private
 workspace storage, network isolation, and forced-command SSH access.
 
+## Nested Bubblewrap boundary
+
+The image also contains the root-owned, mode-0555 Bubblewrap executable bundled
+with Codex at this immutable path:
+
+```text
+/opt/warpmetal-agent-tools/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap
+```
+
+Agent Runtime v0.1.25 can opt an amd64 host into the exact-path AppArmor policy
+needed when a consumer launches that helper inside a Runtime sandbox with a new
+PID namespace and private `/proc`. This is a general nested-isolation
+capability. Nico is the first production acceptance consumer, but any verified
+workload may use it through the signed path.
+
+Example boundary designs include:
+
+- planning: expose an exact repository read-only and a separate writable output
+  directory;
+- coding: expose one approved repository read-write while hiding trusted source
+  mirrors, sibling workspaces, and persistent runner state; and
+- QA: expose the candidate read-only and run repository-controlled checks with
+  private processes, temporary storage, and a scrubbed environment.
+
+The host owner enables the capability once with WarpMetal CLI 0.8.7 or newer by
+installing Runtime 0.1.25 or newer with
+`--nested-private-procfs enable`. Omission means `preserve`; workloads that do
+not create a nested Bubblewrap private procfs do not need it. The policy is
+host-scoped rather than per-sandbox, matches no alternate Bubblewrap binary,
+and does not share CLI credentials or repository access between sandboxes.
+
 ## Local verification
 
 ```sh
