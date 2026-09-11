@@ -1,6 +1,6 @@
 # WarpMetal Agent Sandbox
 
-This repository builds the fixed container image used by WarpMetal Agent
+This repository builds the neutral container image used by WarpMetal Agent
 Runtime. It is the restricted userspace that each agent enters; it is **not**
 the VPS supervisor. The supervisor is the separately signed `warpmetald`
 release installed on the VPS host.
@@ -11,102 +11,73 @@ release installed on the VPS host.
 ghcr.io/warpmetal/warpmetal-agent-sandbox@sha256:<digest>
 ```
 
-Production always pins the Linux amd64 image by digest. Mutable tags are never
-accepted by the Agent Runtime API or supervisor. Other architectures are not
-supported and fail closed during the image build.
+Production pins the Linux amd64 image by digest. Mutable tags are not accepted
+by the Agent Runtime API or supervisor. Other architectures are unsupported and
+fail closed during the image build.
 
-The image contains general-purpose agent prerequisites, all three supported AI
-CLIs, pinned Playwright 1.62.0 Chromium, and a fixed Fontconfig font set for
-local headless UI testing. The CLI versions are fixed at build time:
+The image provides a general-purpose base with Node.js 22 and npm, Python 3,
+Bash, curl, jq, Git, an SSH client, archive utilities, fonts, and Playwright
+1.62.0 with headless Chromium. It does **not** preinstall or configure Codex
+CLI, Claude Code, Cursor CLI, Gemini CLI, an AI-tool manifest, or a WarpMetal
+tool reporter. Selecting sandbox capacity does not select, install, configure,
+authenticate, update, or remove an AI CLI.
 
-- Codex CLI `0.153.4`
-- Claude Code `2.1.263`
-- Cursor CLI `2026.09.02-c22c1a3`
-
-The npm packages are installed only through the committed lockfile and its
-registry integrity values. The official Cursor Linux x64 archive is verified
-against a committed SHA-256 value before extraction. The image build stops on
-any integrity mismatch. CLI auto-update is disabled where the tool supports
-it; the installed files are root-owned and not writable by the sandbox user.
-
-`PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` is shared by user-installed Node or
-Python Playwright clients that use the matching browser revision. No browser
+`PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` exposes the bundled browser revision
+to compatible user-installed Node or Python Playwright clients. No browser
 daemon or inbound listener is started.
 
-## Agent tool contract
+## User-installed tools
 
-`/usr/local/share/warpmetal/agent-tools.json` is the immutable
-`warpmetal.agent-tools.v1` manifest. It contains exactly the `codex`, `claude`,
-and `cursor` tools, including their pinned version, executable, version probe,
-and interactive login guidance. It contains no download URL or credential.
-
-The login commands are guidance for a human already connected to the sandbox:
+Agent Runtime mounts `/home/agent` as the persistent, writable workspace while
+the container root remains read-only. The image adds
+`/home/agent/.local/bin` to `PATH`; it does not create an npm configuration or
+any vendor configuration. Choose an explicit home-local prefix when installing
+an npm CLI:
 
 ```sh
-codex login --device-auth
-claude
-agent login
+mkdir -p "$HOME/.local"
+npm install --global --prefix "$HOME/.local" <package>
 ```
 
-No account login runs during image build or sandbox creation. Each CLI stores
-the user's later authentication state in that sandbox's persistent home or
-workspace; WarpMetal does not bake, request, or report those credentials.
+For a vendor binary or installer, choose paths beneath `/home/agent`, such as
+`$HOME/.local/bin` or `$HOME/.local/opt`. Do not rely on writing to `/usr/local`,
+`/opt`, or `/etc`, and do not use `sudo` inside the sandbox.
 
-`/usr/local/bin/warpmetal-agent-tool-report` reads only the baked manifest,
-executes only the three fixed local version probes, and emits a bounded JSON
-array in manifest order. Each observation has an `id`, an `available` or
-`failed` status, and either the exact version or a generic bounded error. It
-does not log in, update, install, or download software and does not include
-command output in failures.
+Users own every installed tool and its version, configuration, authentication,
+approval settings, updates, and removal. Authenticate only after connecting to
+the intended sandbox. Tool configuration and credentials stored beneath the
+persistent home remain with that workspace; WarpMetal does not request, copy,
+probe, or report AI-provider credentials.
 
-The image runs as UID/GID 1000, contains no SSH server or container engine, and
-contains no WarpMetal, payment, wallet, owner SSH, or AI-provider credentials.
-The supervisor adds the runtime boundaries: read-only root filesystem, dropped
-capabilities, `no-new-privileges`, user namespaces, resource limits, private
-workspace storage, network isolation, and forced-command SSH access.
+The outer Runtime container is the sandbox boundary for user-installed tools
+and any child processes or subagents they launch. The image provides no nested
+Bubblewrap policy, SSH server, Docker or Podman engine, or host container-engine
+socket.
 
-## Nested Bubblewrap boundary
+## Runtime boundary
 
-The image also contains the root-owned, mode-0555 Bubblewrap executable bundled
-with Codex at this immutable path:
-
-```text
-/opt/warpmetal-agent-tools/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap
-```
-
-Agent Runtime v0.1.25 can opt an amd64 host into the exact-path AppArmor policy
-needed when a consumer launches that helper inside a Runtime sandbox with a new
-PID namespace and private `/proc`. This is a general nested-isolation
-capability. Nico is the first production acceptance consumer, but any verified
-workload may use it through the signed path.
-
-Example boundary designs include:
-
-- planning: expose an exact repository read-only and a separate writable output
-  directory;
-- coding: expose one approved repository read-write while hiding trusted source
-  mirrors, sibling workspaces, and persistent runner state; and
-- QA: expose the candidate read-only and run repository-controlled checks with
-  private processes, temporary storage, and a scrubbed environment.
-
-The host owner enables the capability once with WarpMetal CLI 0.8.7 or newer by
-installing Runtime 0.1.25 or newer with
-`--nested-private-procfs enable`. Omission means `preserve`; workloads that do
-not create a nested Bubblewrap private procfs do not need it. The policy is
-host-scoped rather than per-sandbox, matches no alternate Bubblewrap binary,
-and does not share CLI credentials or repository access between sandboxes.
+The image runs as UID/GID 1000 and contains no WarpMetal, payment, wallet,
+owner-SSH, or AI-provider credentials. The supervisor applies the runtime
+boundaries: a read-only root filesystem, dropped capabilities,
+`no-new-privileges`, user namespaces, resource limits, private workspace
+storage, non-host networking, and forced-command SSH access.
 
 ## Local verification
 
 ```sh
 docker build --pull --platform linux/amd64 --tag warpmetal-agent-sandbox:test --file Containerfile .
+sh -n test-image.sh
 sh test-image.sh warpmetal-agent-sandbox:test
 ```
 
-The test runs with no network, launches real Chromium, and verifies every CLI
-through the manifest reporter as UID 1000 under a read-only root filesystem,
-dropped capabilities, `no-new-privileges`, and a `noexec` temporary filesystem.
-It also resolves an installed sans-serif font and renders synthetic mobile and
-desktop screenshots. GitHub Actions runs the complete acceptance test on
-`linux/amd64`, then publishes the amd64 image with SBOM and provenance
-attestations and signs its digest with GitHub OIDC through Sigstore Cosign.
+The acceptance test runs without network access and verifies that the image has
+no baked AI CLI, related artifact, vendor configuration, or credential. As UID
+1000, it installs a local test CLI with an explicit home-local npm prefix and
+invokes it through `PATH` while the root filesystem remains read-only. It also
+launches real Chromium, resolves an installed sans-serif font, and renders
+synthetic mobile and desktop screenshots under dropped capabilities,
+`no-new-privileges`, and a `noexec` temporary filesystem.
+
+GitHub Actions runs the acceptance test on `linux/amd64`, then publishes the
+amd64 image with SBOM and provenance attestations and signs its digest with
+GitHub OIDC through Sigstore Cosign.
