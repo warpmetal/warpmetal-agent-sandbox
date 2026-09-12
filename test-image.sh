@@ -1,8 +1,90 @@
 #!/bin/sh
 set -eu
 
-image="${1:?usage: test-image.sh IMAGE}"
+image="${1:?usage: test-image.sh IMAGE [--login-shell-only]}"
+test_mode="${2:-all}"
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+
+case "$test_mode" in
+  all|--login-shell-only) ;;
+  *)
+    printf "%s\n" "usage: test-image.sh IMAGE [--login-shell-only]" >&2
+    exit 2
+    ;;
+esac
+
+login_shell_assertions='
+  fail() {
+    printf "%s\n" "$*" >&2
+    exit 1
+  }
+  assert_command_absent() {
+    if command_path=$(command -v "$1" 2>/dev/null); then
+      fail "unexpected preinstalled command: $1 -> $command_path"
+    fi
+  }
+
+  test "$(id -u)" = 1000
+  test "$(id -g)" = 1000
+  test "$HOME" = /home/agent
+  test "$(stat -Lc "%u:%g" "$HOME")" = 1000:1000
+  test -w "$HOME"
+  test ! -e "$HOME/.profile"
+  test ! -e "$HOME/.bashrc"
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) fail "login shell PATH does not contain $HOME/.local/bin: $PATH" ;;
+  esac
+
+  for command_name in codex claude agent cursor-agent gemini warpmetal-agent-tool-report; do
+    assert_command_absent "$command_name"
+  done
+  ! command -v sshd >/dev/null 2>&1
+  ! command -v docker >/dev/null 2>&1
+  ! command -v podman >/dev/null 2>&1
+  if (: > /etc/warpmetal-login-shell-write-probe) 2>/dev/null; then
+    fail "container root is writable from the login shell"
+  fi
+  printf "%s\n" "login shell contract ok"
+'
+
+run_login_shell() {
+  keep_stdin="$1"
+  shift
+
+  if test "$keep_stdin" = yes; then
+    docker_stdin_option=-i
+  else
+    docker_stdin_option=''
+  fi
+
+  # $docker_stdin_option is either the single literal option -i or empty.
+  # shellcheck disable=SC2086
+  docker run --rm $docker_stdin_option \
+    --platform linux/amd64 \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --user 1000:1000 \
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m \
+    --tmpfs /home/agent:rw,exec,nosuid,nodev,size=256m,uid=1000,gid=1000,mode=0700 \
+    "$image" \
+    /bin/sh "$@"
+}
+
+login_shell_status=0
+if ! run_login_shell no -lc "$login_shell_assertions"; then
+  login_shell_status=1
+fi
+if ! printf "%s\n" "$login_shell_assertions" | run_login_shell yes -l; then
+  login_shell_status=1
+fi
+test "$login_shell_status" = 0 || exit "$login_shell_status"
+
+if test "$test_mode" = --login-shell-only; then
+  exit 0
+fi
 
 docker run --rm \
   --platform linux/amd64 \
