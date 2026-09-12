@@ -10,6 +10,8 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
 
 ARG TARGETARCH
 
+COPY --chmod=0644 profile.d/warpmetal-user-path.sh /etc/profile.d/warpmetal-user-path.sh
+
 RUN case "$TARGETARCH" in amd64) ;; *) echo "unsupported image architecture: $TARGETARCH" >&2; exit 1 ;; esac \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
